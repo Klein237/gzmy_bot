@@ -33,17 +33,13 @@ def generate_launch_description():
     # Configure ROS nodes for launch
 
     # Setup project paths
-    
     pkg_project_gazebo = get_package_share_directory('gzmy_bot')
-    
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
-    
-
-    # Check if we're told to use sim time
+    # Variables for launch configuration
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_ros2_control = LaunchConfiguration('use_ros2_control')
-
+   
     remappings = [('/tf', 'tf'),
                   ('/tf_static', 'tf_static')]
 
@@ -52,8 +48,6 @@ def generate_launch_description():
     xacro_file = os.path.join(pkg_path,'description','robot.urdf.xacro')
    
     robot_description_config = Command(['xacro ', xacro_file, ' use_ros2_control:=', use_ros2_control])
-
-    controller_params_file = os.path.join(get_package_share_directory('gzmy_bot'),'config','my_controllers.yaml')
     
     # Create a robot_state_publisher node
     params = {'robot_description': robot_description_config, 'use_sim_time': use_sim_time}
@@ -70,7 +64,7 @@ def generate_launch_description():
         )}.items(),
     )
 
-    # Takes the description and joint angles as inputs and publishes the 3D poses of the robot links
+    # Create nodes for robot state publisher, joint state publisher, and controllers
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
@@ -88,49 +82,29 @@ def generate_launch_description():
 
     )
 
-    controller_manager = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[params,controller_params_file]
-        # parameters=[{'robot_description': robot_description_config},
-        #             controller_params_file]
-    )
-
-    delayed_controller_manager = TimerAction(period=5.0, actions=[controller_manager])
-
     diff_drive_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=["diff_cont"],
+        condition=IfCondition(LaunchConfiguration('use_ros2_control'))
     )
 
-    delayed_diff_drive_spawner = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=controller_manager,
-            on_start=[diff_drive_spawner],
-        )
-    )
 
     joint_broad_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=["joint_broad"],
+        condition=IfCondition(LaunchConfiguration('use_ros2_control'))
     )
 
     twist_mux_params = os.path.join(get_package_share_directory('gzmy_bot'),'config','twrist_mux.yaml')
     twist_mux = Node(
             package="twist_mux",
             executable="twist_mux",
-            parameters=[twist_mux_params, {'use_sim_time': True}],
+            parameters=[twist_mux_params, {'use_sim_time': use_sim_time, 'use_stamped': use_ros2_control}],
             remappings=[('/cmd_vel_out','/diff_cont/cmd_vel_unstamped')]
         )
-
-    delayed_joint_broad_spawner = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=controller_manager,
-            on_start=[joint_broad_spawner],
-        )
-    )
+  
 
      # Spawn the robot
     start_gazebo_ros_spawner_cmd = Node(
@@ -153,7 +127,7 @@ def generate_launch_description():
     rviz = Node(
        package='rviz2',
        executable='rviz2',
-       #arguments=['-d', os.path.join(pkg_project_bringup, 'config', 'diff_drive.rviz')],
+
        condition=IfCondition(LaunchConfiguration('rviz'))
     )
 
@@ -182,6 +156,7 @@ def generate_launch_description():
                               description='Use sim time if true'),
         DeclareLaunchArgument('use_ros2_control', default_value='false',
                               description='ROS2 control enabled if true'),
+        
         bridge,
         ros_gz_image_bridge,
         robot_state_publisher,
@@ -191,11 +166,6 @@ def generate_launch_description():
 
         joint_broad_spawner,
         diff_drive_spawner,
-
-
-        #delayed_controller_manager,
-        #delayed_diff_drive_spawner,
-        #delayed_joint_broad_spawner,
 
         start_gazebo_ros_spawner_cmd,
         rviz
