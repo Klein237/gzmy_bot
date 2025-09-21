@@ -39,7 +39,7 @@
         <sensor name='laser' type='gpu_lidar'>
             <pose>0 0 0 0 0 0</pose>
             <topic>scan</topic>
-             <gz_frame_id>laser_frame</gz_frame_id>
+            <gz_frame_id>laser_frame</gz_frame_id>
             <update_rate>10</update_rate>
             <lidar>
               <scan>
